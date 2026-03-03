@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>.</title>
+
+<meta name="description" content=".">
+<meta property="og:title" content=".">
+<meta property="og:description" content=".">
+<meta property="og:type" content="website">
+
+<style>
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #ffffff;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition: background 0.35s ease;
+  overflow: hidden;
+}
+
+.dot {
+  width: 16px;
+  height: 16px;
+  background: #000000;
+  border-radius: 50%;
+  cursor: crosshair;
+  transition: transform 0.12s ease, background 0.35s ease;
+}
+
+.dot.pulse { transform: scale(1.15); }
+.dot.glitch { transform: scale(0.85) rotate(6deg); }
+
+.progress-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: transparent;
+}
+
+.progress-bar {
+  height: 100%;
+  width: 0%;
+  background: #000000;
+  transition: width 0.1s linear, background 0.35s ease;
+}
+
+.riddle {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  font-family: monospace;
+  font-size: 14px;
+  line-height: 1.6;
+}
+</style>
+</head>
+<body>
+
+<div class="dot" onclick="clickDot()"></div>
+
+<div class="progress-container" aria-hidden="true">
+  <div class="progress-bar" id="progressBar"></div>
+</div>
+
+<script>
+let count = 0;
+let flipped = false;
+const maxClicks = 46;
+
+function pulse(el) {
+  el.classList.add('pulse');
+  setTimeout(() => el.classList.remove('pulse'), 90);
+}
+
+function glitch(el) {
+  el.classList.add('glitch');
+  setTimeout(() => el.classList.remove('glitch'), 120);
+}
+
+function flip(el) {
+  flipped = !flipped;
+  document.body.style.background = flipped ? "#000000" : "#ffffff";
+  el.style.background = flipped ? "#ffffff" : "#000000";
+
+  // progress bar must invert too
+  const bar = document.getElementById('progressBar');
+  bar.style.background = flipped ? "#ffffff" : "#000000";
+}
+
+function updateProgress() {
+  const bar = document.getElementById('progressBar');
+  const pct = Math.min(100, (count / maxClicks) * 100);
+  bar.style.width = pct + "%";
+}
+
+function showRiddle() {
+  document.body.innerHTML = `
+    <div class="riddle" style="color:${flipped ? '#ffffff' : '#000000'}; background:${flipped ? '#000000' : '#ffffff'};">
+      Before me, chaos.<br>
+      After me, silence.<br><br>
+      What am I?
+    </div>
+  `;
+}
+
+function clickDot() {
+  const dot = document.querySelector('.dot');
+  count++;
+
+  pulse(dot);
+  updateProgress();
+
+  if (count === 7) flip(dot);
+  if (count === 23) glitch(dot);
+  if (count === 46) showRiddle();
+}
+</script>
+
+<!-- 2e -->
+<!-- X: https://x.com/ofpointsolana -->
+<!-- TG: https://t.me/ofpointsolana -->
+
+</body>
+</html>
