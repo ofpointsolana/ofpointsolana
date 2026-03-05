@@ -12,8 +12,14 @@
 
 <style>
 :root{
-  --bg: #ffffff;
-  --fg: #000000;
+  --bg:#ffffff;
+  --fg:#000000;
+
+  /* dot transform vars */
+  --x: 0px;
+  --y: 0px;
+  --s: 1;
+  --r: 0deg;
 }
 
 html, body{
@@ -25,24 +31,25 @@ html, body{
 }
 
 body{
-  display:grid;
-  place-items:center;
+  display:block;
   transition: background .25s ease;
   -webkit-tap-highlight-color: transparent;
 }
 
-/* DOT */
+/* DOT (main) */
 .dot{
+  position:fixed;
+  left:50%;
+  top:50%;
   width:32px;
   height:32px;
   background: var(--fg);
   border-radius:50%;
   cursor: crosshair;
+  transform: translate(calc(-50% + var(--x)), calc(-50% + var(--y))) scale(var(--s)) rotate(var(--r));
   transition: transform .12s ease, background .25s ease;
+  touch-action: manipulation;
 }
-
-.dot.pulse{ transform: scale(1.1); }
-.dot.glitch{ transform: scale(0.9) rotate(6deg); }
 
 /* PROGRESS BAR */
 .progress{
@@ -60,7 +67,7 @@ body{
   transition: width .08s linear, background .25s ease;
 }
 
-/* OVERLAY */
+/* OVERLAY (riddle) */
 .overlay{
   position:fixed;
   inset:0;
@@ -73,6 +80,7 @@ body{
   font-family: monospace;
   font-size:18px;
   line-height:1.6;
+  z-index: 50;
 }
 
 /* PULSING BUTTON */
@@ -103,25 +111,137 @@ body{
   opacity:0.7;
 }
 
-.history:hover{
-  opacity:1;
-}
+.history:hover{ opacity:1; }
 
 @keyframes pulseButton{
   0%{ transform: scale(1); }
   50%{ transform: scale(1.1); }
   100%{ transform: scale(1); }
 }
+
+/* RESOURCE DOTS (sempre visibili) */
+.resources{
+  position:fixed;
+  left:0;
+  right:0;
+  bottom:10px;
+  display:flex;
+  justify-content:space-between;
+  padding:0 14px;
+  z-index: 5;
+  pointer-events:none; /* container */
+}
+
+.res-dot{
+  width:10px;
+  height:10px;
+  border-radius:50%;
+  background: var(--fg);
+  opacity:0.18;
+  text-decoration:none;
+  display:block;
+  pointer-events:auto; /* clickable */
+}
+
+.res-dot:hover{ opacity:0.65; }
+
+/* DRAW GATE (23) */
+.draw{
+  position:fixed;
+  inset:0;
+  display:none;
+  background: var(--bg);
+  z-index: 40;
+}
+
+.draw.on{ display:block; }
+
+.drawCanvas{
+  width:100vw;
+  height:100vh;
+  display:block;
+  touch-action: none;
+}
+
+.pencil{
+  position:fixed;
+  top:14px;
+  right:14px;
+  width:44px;
+  height:44px;
+  border:2px solid var(--fg);
+  border-radius:12px;
+  display:grid;
+  place-items:center;
+  font-family: monospace;
+  font-size:22px;
+  user-select:none;
+  opacity:0.85;
+}
+
+.pencil:active{ transform: scale(0.98); }
+
+.drawHint{
+  position:fixed;
+  bottom:18px;
+  left:50%;
+  transform:translateX(-50%);
+  font-family: monospace;
+  font-size:12px;
+  opacity:.45;
+}
+
+/* DECOY GATE (39) */
+.decoys{
+  position:fixed;
+  inset:0;
+  display:none;
+  background: var(--bg);
+  z-index: 45;
+}
+
+.decoys.on{ display:block; }
+
+.decoy-dot{
+  position:fixed;
+  width:18px;
+  height:18px;
+  border-radius:50%;
+  background: var(--fg);
+  opacity:0.85;
+  cursor: crosshair;
+  transform: translate(-50%, -50%);
+  touch-action: manipulation;
+}
+
 </style>
 </head>
 
 <body>
+
+<!-- resource dots (TG / GH / PUMP) -->
+<div class="resources" aria-hidden="true">
+  <a class="res-dot" href="https://t.me/ofpointsolana" target="_blank" rel="noopener noreferrer"></a>
+  <a class="res-dot" href="https://github.com/ofpointsolana/ofpointsolana" target="_blank" rel="noopener noreferrer"></a>
+  <!-- TODO: replace with your real pump.fun coin link -->
+  <a class="res-dot" href="https://pump.fun/" target="_blank" rel="noopener noreferrer"></a>
+</div>
 
 <div class="dot" id="dot"></div>
 
 <div class="progress">
   <div id="bar"></div>
 </div>
+
+<!-- draw gate -->
+<div class="draw" id="draw">
+  <canvas class="drawCanvas" id="drawCanvas"></canvas>
+  <div class="pencil" id="pencil">✎</div>
+  <div class="drawHint">.</div>
+</div>
+
+<!-- decoy gate -->
+<div class="decoys" id="decoys"></div>
 
 <script>
 let count = 0;
@@ -131,28 +251,211 @@ const maxClicks = 46;
 const dot = document.getElementById("dot");
 const bar = document.getElementById("bar");
 
+/* gates */
+let gate23Done = false;
+let gate39Done = false;
+
+/* move mode */
+let moveMode = false;
+
+/* ---------- theme ---------- */
 function setTheme(){
   document.documentElement.style.setProperty("--bg", flipped ? "#000000" : "#ffffff");
   document.documentElement.style.setProperty("--fg", flipped ? "#ffffff" : "#000000");
 }
 
+/* ---------- micro anims (via css vars) ---------- */
 function pulse(){
-  dot.classList.add("pulse");
-  setTimeout(()=>dot.classList.remove("pulse"), 90);
+  document.documentElement.style.setProperty("--s", "1.1");
+  setTimeout(()=>document.documentElement.style.setProperty("--s", "1"), 90);
 }
 
 function glitch(){
-  dot.classList.add("glitch");
-  setTimeout(()=>dot.classList.remove("glitch"), 120);
+  document.documentElement.style.setProperty("--s", "0.9");
+  document.documentElement.style.setProperty("--r", "6deg");
+  setTimeout(()=>{
+    document.documentElement.style.setProperty("--s", "1");
+    document.documentElement.style.setProperty("--r", "0deg");
+  }, 120);
 }
 
+/* ---------- progress ---------- */
 function updateProgress(){
   bar.style.width = (count / maxClicks * 100) + "%";
 }
 
+/* ---------- dot move (13) ---------- */
+function rand(min, max){ return Math.random() * (max - min) + min; }
+
+function moveDotRandom(){
+  // keep dot within viewport margins
+  const margin = 60;
+  const x = rand(-((window.innerWidth/2)-margin), ((window.innerWidth/2)-margin));
+  const y = rand(-((window.innerHeight/2)-margin), ((window.innerHeight/2)-margin));
+  document.documentElement.style.setProperty("--x", x.toFixed(0) + "px");
+  document.documentElement.style.setProperty("--y", y.toFixed(0) + "px");
+}
+
+/* ---------- 23: draw circle gate ---------- */
+const draw = document.getElementById("draw");
+const drawCanvas = document.getElementById("drawCanvas");
+const pencil = document.getElementById("pencil");
+const ctx = drawCanvas.getContext("2d");
+
+let drawing = false;
+let pts = [];
+
+function resizeCanvas(){
+  const dpr = window.devicePixelRatio || 1;
+  drawCanvas.width = Math.floor(window.innerWidth * dpr);
+  drawCanvas.height = Math.floor(window.innerHeight * dpr);
+  drawCanvas.style.width = window.innerWidth + "px";
+  drawCanvas.style.height = window.innerHeight + "px";
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.lineWidth = 3;
+  ctx.lineCap = "round";
+  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue("--fg").trim();
+}
+
+window.addEventListener("resize", resizeCanvas);
+resizeCanvas();
+
+function openDrawGate(){
+  resizeCanvas();
+  ctx.clearRect(0,0, drawCanvas.width, drawCanvas.height);
+  pts = [];
+  draw.classList.add("on");
+}
+
+function closeDrawGate(){
+  draw.classList.remove("on");
+  pts = [];
+  drawing = false;
+}
+
+function dist(a,b){
+  const dx=a.x-b.x, dy=a.y-b.y;
+  return Math.hypot(dx,dy);
+}
+
+function isCircle(points){
+  if(points.length < 45) return false;
+
+  let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+  for(const p of points){
+    if(p.x<minX) minX=p.x;
+    if(p.y<minY) minY=p.y;
+    if(p.x>maxX) maxX=p.x;
+    if(p.y>maxY) maxY=p.y;
+  }
+
+  const w = maxX-minX;
+  const h = maxY-minY;
+  if(w < 70 || h < 70) return false;
+
+  const ratio = w/h;
+  if(ratio < 0.72 || ratio > 1.28) return false;
+
+  const start = points[0];
+  const end = points[points.length-1];
+  if(dist(start,end) > Math.min(w,h)*0.38) return false;
+
+  return true;
+}
+
+function drawStart(x,y){
+  drawing = true;
+  pts = [{x,y}];
+  ctx.beginPath();
+  ctx.moveTo(x,y);
+}
+
+function drawMove(x,y){
+  if(!drawing) return;
+  pts.push({x,y});
+  ctx.lineTo(x,y);
+  ctx.stroke();
+}
+
+function drawEnd(){
+  if(!drawing) return;
+  drawing = false;
+
+  if(isCircle(pts)){
+    gate23Done = true;
+    closeDrawGate();
+    glitch();
+  }else{
+    // reset silently
+    ctx.clearRect(0,0, drawCanvas.width, drawCanvas.height);
+    pts = [];
+  }
+}
+
+drawCanvas.addEventListener("pointerdown", (e)=>{
+  e.preventDefault();
+  drawStart(e.clientX, e.clientY);
+});
+drawCanvas.addEventListener("pointermove", (e)=>{
+  e.preventDefault();
+  drawMove(e.clientX, e.clientY);
+});
+drawCanvas.addEventListener("pointerup", (e)=>{
+  e.preventDefault();
+  drawEnd();
+});
+drawCanvas.addEventListener("pointercancel", (e)=>{
+  e.preventDefault();
+  drawEnd();
+});
+
+pencil.addEventListener("click", ()=>{
+  ctx.clearRect(0,0, drawCanvas.width, drawCanvas.height);
+  pts = [];
+});
+
+/* ---------- 39: decoy dots gate ---------- */
+const decoys = document.getElementById("decoys");
+let realDecoyId = null;
+
+function openDecoysGate(){
+  decoys.innerHTML = "";
+  decoys.classList.add("on");
+
+  // create 10 dots, 1 is real
+  const total = 10;
+  realDecoyId = Math.floor(Math.random() * total);
+
+  for(let i=0;i<total;i++){
+    const d = document.createElement("div");
+    d.className = "decoy-dot";
+    d.style.left = rand(10, 90) + "vw";
+    d.style.top  = rand(10, 85) + "vh";
+    d.dataset.i = String(i);
+
+    d.addEventListener("click", ()=>{
+      if(Number(d.dataset.i) === realDecoyId){
+        gate39Done = true;
+        decoys.classList.remove("on");
+        decoys.innerHTML = "";
+        // small confirmation via move + glitch
+        moveDotRandom();
+        glitch();
+      }else{
+        // wrong = reshuffle silently
+        openDecoysGate();
+      }
+    });
+
+    decoys.appendChild(d);
+  }
+}
+
+/* ---------- riddle (46) ---------- */
 function showRiddle(){
   dot.style.display = "none";
   document.querySelector(".progress").style.display = "none";
+  document.querySelector(".resources").style.display = "none";
 
   const overlay = document.createElement("div");
   overlay.className = "overlay";
@@ -165,34 +468,72 @@ function showRiddle(){
 
       <a href="https://en.wikipedia.org/wiki/Point_(typography)"
          target="_blank"
-         class="goto">
+         class="goto"
+         rel="noopener noreferrer">
          →
       </a>
 
       <a href="history.html" class="history">
         History of .
       </a>
-
     </div>
   `;
 
   document.body.appendChild(overlay);
 }
 
+/* ---------- main click ---------- */
 dot.addEventListener("click", ()=>{
+  // if a gate overlay is open, ignore
+  if(draw.classList.contains("on")) return;
+  if(decoys.classList.contains("on")) return;
+
   count++;
   pulse();
   updateProgress();
 
+  // 7: invert theme
   if(count === 7){
     flipped = !flipped;
     setTheme();
   }
 
-  if(count === 23){
-    glitch();
+  // 13: start move mode (dot begins to move after each click until 23 gate)
+  if(count === 13){
+    moveMode = true;
+    moveDotRandom();
   }
 
+  // keep moving while in move mode (13..22)
+  if(moveMode && count >= 13 && count < 23){
+    // move after click to create chase effect
+    moveDotRandom();
+  }
+
+  // 23: draw gate
+  if(count === 23){
+    if(!gate23Done){
+      openDrawGate();
+      // block progression: revert count
+      count = 22;
+      updateProgress();
+      return;
+    }else{
+      glitch();
+    }
+  }
+
+  // 39: decoy gate
+  if(count === 39){
+    if(!gate39Done){
+      openDecoysGate();
+      count = 38;
+      updateProgress();
+      return;
+    }
+  }
+
+  // 46: finale
   if(count === 46){
     showRiddle();
   }
